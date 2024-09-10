@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using System.Linq;
 
 namespace PostMessage.NET.GUI
 {
@@ -11,22 +12,17 @@ namespace PostMessage.NET.GUI
     {
         [DllImport("user32.dll", EntryPoint = "FindWindow")]  //声明FindWindowAPI
         private extern static IntPtr FindWindow(string lpClassName, string lpWindowName);
-        [DllImport("USER32.DLL")]
-        public static extern bool SetForegroundWindow(IntPtr hWnd);
-        [DllImport("USER32.DLL")]
-        public static extern IntPtr GetForegroundWindow();
-        [DllImport("user32.dll")]
-        public static extern int SendMessage(IntPtr hWnd, int Msg, uint wParam, uint lParam);
 
-        [DllImport("user32.dll")]
-        public static extern int SendMessage(IntPtr hWnd, int uMsg, int wParam, string lParam);
-        [DllImport("user32.dll")]
-        public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
+        [DllImport("user32.dll", EntryPoint = "PostMessage", CallingConvention = CallingConvention.Winapi)]
+        public static extern bool PostMessage(IntPtr hwnd, uint msg, uint wParam, uint lParam);
+
         [DllImport("user32.dll", EntryPoint = "SetWindowText", CharSet = CharSet.Ansi)]
         public static extern int SetWindowText(IntPtr hwnd, string lpString);
 
-        public int PerTime = 25000;
-        public int DelTime = 1000;
+        public int PerTime = 100;
+        public int DelTime = 100;
+
+        private string processName = "CalculatorApp";
 
         System.Threading.Timer threadTimer;
         private List<Process> m_Procs = new List<Process> { };
@@ -42,22 +38,51 @@ namespace PostMessage.NET.GUI
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            m_Processes = Process.GetProcessesByName("WowClassic");
-            if (m_Processes.Length < wowList.Items.Count)
+            var checkedItems = new HashSet<string>(wowList.CheckedItems.Cast<string>());
+
+            // 获取当前 "Wow" 进程的列表
+            Process[] processes = Process.GetProcessesByName(processName);
+
+            // 使用 HashSet 来存储进程显示信息
+            var newProcesses = new HashSet<string>();
+
+            // 添加新的进程信息
+            foreach (var process in processes)
             {
-                wowList.Items.Clear();
+                string processDisplay = process.ProcessName + " (ID: " + process.Id + ")";
+                newProcesses.Add(processDisplay);
             }
-            foreach (var wow in m_Processes)
+
+            // 清除不再存在的进程信息
+            for (int i = wowList.Items.Count - 1; i >= 0; i--)
             {
-                if(!wowList.Items.Contains(wow.MainWindowHandle.ToString()))
+                string item = wowList.Items[i].ToString();
+                if (!newProcesses.Contains(item))
                 {
-                    int index = wowList.Items.Add(wow.MainWindowHandle.ToString());
-                    if (m_ProcessesString.ContainsKey(wow.MainWindowHandle.ToString()))
+                    wowList.Items.RemoveAt(i);
+                }
+            }
+
+            // 添加新的进程信息并设置选中状态
+            foreach (var processDisplay in newProcesses)
+            {
+                if (!wowList.Items.Contains(processDisplay))
+                {
+                    wowList.Items.Add(processDisplay);
+                }
+            }
+
+            // 恢复之前保存的选中状态
+            foreach (var item in newProcesses)
+            {
+                if (checkedItems.Contains(item))
+                {
+                    int index = wowList.Items.IndexOf(item);
+                    if (index != -1)
                     {
                         wowList.SetItemChecked(index, true);
                     }
                 }
-
             }
         }
 
@@ -68,70 +93,63 @@ namespace PostMessage.NET.GUI
             threadTimer.Dispose();
         }
 
+        const uint WM_KEYDOWN = 0x0100;
+        const uint WM_KEYUP = 0x0101;
+        const uint WM_MOUSEMOVE = 0x0200;
+        const uint WM_LBUTTONDOWN = 0x0201;
+        const uint WM_LBUTTONUP = 0x0202;
+        const uint KEY_1 = 0x31;
         private void TimerUp(object state)
         {
             foreach (var wow in m_Procs)
             {
-                Thread.Sleep(DelTime);
-                SendMessage(wow.MainWindowHandle, 0x0104, 0x00000031, 0x20210001); //1
-                SendMessage(wow.MainWindowHandle, 0x0105, 0x00000031, 0xE0210001);
-                Thread.Sleep(DelTime);
-                SendMessage(wow.MainWindowHandle, 0x0104, 0x00000032, 0x20210001); //2
-                SendMessage(wow.MainWindowHandle, 0x0105, 0x00000032, 0xE0210001);
-                Thread.Sleep(DelTime);
-                SendMessage(wow.MainWindowHandle, 0x0104, 0x00000020, 0x20210001); //space
-                SendMessage(wow.MainWindowHandle, 0x0105, 0x00000020, 0xE0210001);
+                Process p = Process.GetProcessById(wow.Id);
+                IntPtr h = p.MainWindowHandle;
+                uint nPos = (uint)( 5<< 16 | 5);
+                PostMessage(h, WM_MOUSEMOVE, 0, nPos);
+                PostMessage(h, WM_LBUTTONDOWN, 0, nPos);
+                System.Threading.Thread.Sleep(50);
+                PostMessage(h, WM_LBUTTONUP, 0, nPos);
+
+                PostMessage(h, WM_KEYDOWN, KEY_1, 0);
+                System.Threading.Thread.Sleep(50);
+                PostMessage(h, WM_KEYUP, KEY_1, 0);
+
             }
         }
-
         private void btnStart_Click(object sender, EventArgs e)
         {
-            int nCount = 0;
-            foreach (Process wow in Process.GetProcessesByName("WowClassic"))
+            // 遍历选中的进程项
+            foreach (var item in wowList.CheckedItems)
             {
-                nCount++;
-                if (m_ProcessesString.ContainsKey(wow.MainWindowHandle.ToString()))
+                string selectedItem = item.ToString();
+
+                // 从选中的项中提取进程ID
+                string processIdStr = selectedItem.Split(new string[] { "(ID: ", ")" }, StringSplitOptions.None)[1];
+                int processId = int.Parse(processIdStr);
+
+                // 查找对应的进程
+                Process process = Process.GetProcessById(processId);
+
+                // 如果进程不在 m_Procs 列表中，添加它
+                if (!m_Procs.Any(p => p.Id == process.Id))
                 {
-                    m_Procs.Add(wow);
-                    SetWindowText(wow.MainWindowHandle, wow.MainWindowHandle.ToString());
+                    m_Procs.Add(process);
                 }
             }
-            if (nCount > 0)
-            {
-                btnStart.Text = "正在对" + nCount.ToString() + "个客户端发送按键中";
-                threadTimer.Change(0, PerTime);
-                btnStop.Enabled = true;
-                btnStart.Enabled = false;
-            }
-            else
-            {
-                MessageBox.Show("进程中没有找到客户端");
-            }
+            threadTimer.Change(0, PerTime);
+            btnStop.Enabled = true;
+            btnStart.Enabled = false;
+            MessageBox.Show($"已选择的进程已添加到列表。当前进程数量：{m_Procs.Count}");
         }
         private void btnStop_Click(object sender, EventArgs e)
         {
             m_Procs.Clear();
-            btnStart.Text = "开始";
             btnStop.Enabled = false;
             btnStart.Enabled = true;
             threadTimer.Change(Timeout.Infinite, PerTime);
         }
         private int m_SpaceHeight, m_SpaceWidth, m_SplitHeight;
-
-        private void wowList_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            CheckedListBox newsender = (CheckedListBox)sender;
-            if (newsender.Text == "") return;
-            if (btnStart.Enabled && !m_ProcessesString.ContainsKey(newsender.Text) && newsender.GetItemChecked(newsender.SelectedIndex))
-                m_ProcessesString.Add(newsender.Text , newsender.Text);
-            else if (!newsender.GetItemChecked(newsender.SelectedIndex))
-                m_ProcessesString.Remove(newsender.Text);
-            else
-            {
-                MessageBox.Show("先停止再添加");
-                newsender.SetItemChecked(newsender.SelectedIndex, false);
-            }
-        }
 
         private void Form1_Resize(object sender, EventArgs e)
         {

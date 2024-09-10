@@ -64,12 +64,11 @@
             this.wowList.Name = "wowList";
             this.wowList.Size = new System.Drawing.Size(214, 84);
             this.wowList.TabIndex = 2;
-            this.wowList.SelectedIndexChanged += new System.EventHandler(this.wowList_SelectedIndexChanged);
             // 
             // timer1
             // 
             this.timer1.Enabled = true;
-            this.timer1.Interval = 3000;
+            this.timer1.Interval = 1000;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
             // Form1
