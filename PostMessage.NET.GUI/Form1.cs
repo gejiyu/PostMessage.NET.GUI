@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using System.Linq;
+using System.Collections.Concurrent;
 
 namespace PostMessage.NET.GUI
 {
@@ -19,19 +20,15 @@ namespace PostMessage.NET.GUI
         [DllImport("user32.dll", EntryPoint = "SetWindowText", CharSet = CharSet.Ansi)]
         public static extern int SetWindowText(IntPtr hwnd, string lpString);
 
-        public int PerTime = 100;
-        public int DelTime = 100;
+        public int PerTime = 4600;
 
-        private string processName = "CalculatorApp";
+        private string processName = "Wow";
 
         System.Threading.Timer threadTimer;
-        private List<Process> m_Procs = new List<Process> { };
-        private Process[] m_Processes;
-        private Dictionary<string,string> m_ProcessesString;
+        private ConcurrentBag<Process> m_Procs = new ConcurrentBag<Process> { };
         public Form1()
         {
             InitializeComponent();
-            m_ProcessesString = new Dictionary<string, string>();
             CheckForIllegalCrossThreadCalls = false;
             threadTimer = new System.Threading.Timer(new TimerCallback(TimerUp), null, Timeout.Infinite, PerTime);
         }
@@ -88,7 +85,6 @@ namespace PostMessage.NET.GUI
 
         ~Form1()
         {
-            m_Procs.Clear();
             threadTimer.Change(Timeout.Infinite, PerTime);
             threadTimer.Dispose();
         }
@@ -107,14 +103,25 @@ namespace PostMessage.NET.GUI
                 IntPtr h = p.MainWindowHandle;
                 uint nPos = (uint)( 5<< 16 | 5);
                 PostMessage(h, WM_MOUSEMOVE, 0, nPos);
+                System.Threading.Thread.Sleep(30);
                 PostMessage(h, WM_LBUTTONDOWN, 0, nPos);
-                System.Threading.Thread.Sleep(50);
+                System.Threading.Thread.Sleep(30);
                 PostMessage(h, WM_LBUTTONUP, 0, nPos);
-
+                System.Threading.Thread.Sleep(30);
+                PostMessage(h, WM_LBUTTONDOWN, 0, nPos);
+                System.Threading.Thread.Sleep(30);
+                PostMessage(h, WM_LBUTTONUP, 0, nPos);
+                System.Threading.Thread.Sleep(2000);
+                System.Threading.Thread.Sleep(200);
                 PostMessage(h, WM_KEYDOWN, KEY_1, 0);
-                System.Threading.Thread.Sleep(50);
+                System.Threading.Thread.Sleep(30);
                 PostMessage(h, WM_KEYUP, KEY_1, 0);
-
+                System.Threading.Thread.Sleep(30);
+                PostMessage(h, WM_KEYDOWN, KEY_1, 0);
+                System.Threading.Thread.Sleep(30);
+                PostMessage(h, WM_KEYUP, KEY_1, 0);
+                System.Threading.Thread.Sleep(1750);
+                System.Threading.Thread.Sleep(200);
             }
         }
         private void btnStart_Click(object sender, EventArgs e)
@@ -140,14 +147,13 @@ namespace PostMessage.NET.GUI
             threadTimer.Change(0, PerTime);
             btnStop.Enabled = true;
             btnStart.Enabled = false;
-            MessageBox.Show($"已选择的进程已添加到列表。当前进程数量：{m_Procs.Count}");
         }
         private void btnStop_Click(object sender, EventArgs e)
         {
-            m_Procs.Clear();
+            threadTimer.Change(Timeout.Infinite, PerTime);
             btnStop.Enabled = false;
             btnStart.Enabled = true;
-            threadTimer.Change(Timeout.Infinite, PerTime);
+            m_Procs = new ConcurrentBag<Process>();
         }
         private int m_SpaceHeight, m_SpaceWidth, m_SplitHeight;
 
